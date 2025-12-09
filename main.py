@@ -6,7 +6,21 @@ from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse
 from collections import deque
 import re
+from fastapi import Depends, HTTPException, Security
+from fastapi.security.api_key import APIKeyHeader
+import os
 
+API_KEY_NAME = "X-API-Key"
+api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
+
+VALID_API_KEYS = set(
+    k.strip() for k in os.getenv("API_KEYS", "").split(",") if k.strip()
+)
+
+def get_api_key(api_key: str = Security(api_key_header)):
+    if api_key in VALID_API_KEYS:
+        return api_key
+    raise HTTPException(status_code=403, detail="Invalid or missing API key")
 # ----------------------------
 # FASTAPI APP
 # ----------------------------
@@ -238,7 +252,7 @@ class CrawlResponse(BaseModel):
 # ----------------------------
 
 @app.post("/crawl", response_model=CrawlResponse)
-def crawl_site(req: CrawlRequest):
+def crawl_site(req: CrawlRequest, api_key: str = Depends(get_api_key)):
     pages_raw = run_crawl(req.url, req.max_pages)
     # FastAPI + Pydantic will validate/convert automatically
     return CrawlResponse(
